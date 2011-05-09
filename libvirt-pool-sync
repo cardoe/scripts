@@ -1,0 +1,160 @@
+#!/bin/bash
+
+# Prints out the usage of this tool
+function usage()
+{
+	printf "Usage: %s <source-machine> <dest-machine>\n" `basename $1`
+	printf "\n"
+	printf "Syncs the storage pools between two machines\n"
+	exit 1
+}
+
+# Check that the machine can be reached
+function ping_machine()
+{
+	ping -q -w 1 -c 1 ${1} > /dev/null 2>&1
+	if [[ $? -ne 0 ]]; then
+		printf "Unable to reach '%s'. Check your network.\n" ${1} 1>&2
+		return 1
+	fi
+	
+	return 0
+}
+
+# Grab the list of pools from the source machine, trimming off the header,
+# trimming off the trailer, cutting the list to just the names, dumping default
+function grab_pool_list()
+{
+	local POOL
+	POOL=$(virsh -c qemu+tls://${1}/system?no_tty=1 pool-list | \
+		tail -n +3 | head -n -1 | cut -d ' ' -f 1)
+
+	# Check that the command worked
+	if [[ $? -ne 0 ]]; then
+		printf "Failed to retrieve storage pools from '%s'\n" ${1} 1>&2
+		exit 1
+	fi
+
+	echo ${POOL}
+}
+
+# Check that they passed in the correct amount of arguments
+if [[ $# -ne 2 ]]; then
+	usage $0
+fi
+
+# Did the user ask for help
+if [[ $1 == "-h" || $1 == "--help" ]]; then
+	usage $0
+fi
+
+# Set the variables to the user supplied info
+SOURCE=$1
+DEST=$2
+
+# Make sure they didn't supply an empty argument
+if [[ -z ${SOURCE} ]]; then
+	printf "source machine cannot be empty"
+	exit 1
+fi
+
+# Make sure they didn't supply an empty argument
+if [[ -z ${DEST} ]]; then
+	printf "dest machine cannot be empty"
+	exit 1
+fi
+
+# Source and Dest can't be the same
+if [[ ${SOURCE} == ${DEST} ]]; then
+	printf "source machine '%s' cannot match dest machine '%s'.\n" \
+		${SOURCE} ${DEST}
+	exit 1
+fi
+
+# Check that the source machine can be reached
+ping_machine ${SOURCE} || exit 1
+
+# Check that the dest machine can be reached
+ping_machine ${DEST} || exit 1
+
+# Get the source list
+SRCPOOL=$(grab_pool_list ${SOURCE})
+
+# Check that it worked
+if [[ $? -ne 0 ]]; then
+	exit 1
+fi
+
+# Check that we have source pools 
+if [[ -z ${SRCPOOL} ]]; then
+	printf "%s does not have any storage pools defined\n" ${SOURCE}
+	exit 1
+fi
+
+# Get the dest list
+DESTPOOL=$(grab_pool_list ${DEST})
+
+if [[ $? -ne 0 ]]; then
+	exit 1
+fi
+
+# Remove any items from the src pool that are in the dest pool
+newpool=
+for p in ${SRCPOOL}; do
+	x=0
+	for y in ${DESTPOOL}; do
+		if [[ ${p} = ${y} ]]; then
+			x=1
+			break
+		fi
+	done
+
+	if [[ ${x} -eq 0 ]]; then
+		newpool="${newpool} ${p}"
+	fi
+done
+SRCPOOL=${newpool}
+
+for p in ${SRCPOOL}; do
+	# Dump the XML for each pool
+	virsh -c qemu+tls://${SOURCE}/system?no_tty=1 pool-dumpxml "${p}" > "/tmp/${p}"
+
+	# Check that the command worked
+	if [[ $? -ne 0 ]]; then
+		printf "Failed to get the storage pool definition for '%s' on '%s'\n" \
+			${p} ${SOURCE}
+		exit 1
+	fi
+	
+	# Load the XML on the target
+	virsh -c qemu+tls://${DEST}/system?no_tty=1 pool-define "/tmp/${p}"
+
+	# Check that the command worked
+	if [[ $? -ne 0 ]]; then
+		printf "Failed to define the storage pool for '%s' on '%s'\n" \
+			${p} ${DEST}
+		exit 1
+	fi
+
+	# Set the storage pool to start up
+	virsh -c qemu+tls://${DEST}/system?no_tty=1 pool-start "${p}"
+
+	# Check that the command worked
+	if [[ $? -ne 0 ]]; then
+		printf "Failed to auto-start the storage pool for '%s' on '%s'\n" \
+			${p} ${DEST}
+		exit 1
+	fi
+
+	# Set the storage pool to start by default
+	virsh -c qemu+tls://${DEST}/system?no_tty=1 pool-autostart "${p}"
+
+	# Check that the command worked
+	if [[ $? -ne 0 ]]; then
+		printf "Failed to auto-start the storage pool for '%s' on '%s'\n" \
+			${p} ${DEST}
+		exit 1
+	fi
+
+	rm -f "/tmp/${p}"
+done
