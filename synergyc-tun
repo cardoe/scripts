@@ -1,0 +1,33 @@
+#!/bin/sh
+
+function usage()
+{
+	local app=`basename ${1}`
+	printf "%s <server-address> [ my-machine-name ]\n" ${app}
+}
+
+if [ $# -eq 0 -o $# -gt 2 ]; then
+	usage $0;
+	exit 1
+fi
+
+if [ "x${1}" = "x-h" -o "x${1}" = "x--help" ];then
+	usage $0;
+	exit 1
+fi
+
+TARGET=${1}
+HOSTNAME=`hostname`
+
+if [ $# -eq 2 ]; then
+	HOSTNAME=${2}
+fi
+
+# Establish port forwarding for port 24800, the default synergy port,
+# to the ${TARGET} synergy server.
+# <target_hostname>.example.com
+# '-fN' backgrounds the session
+ssh -Nf -L 24800:${TARGET}:24800 ${TARGET}
+
+# ${HOSTNAME} is as specified in your Synergy Configuration file.
+/usr/bin/synergyc -f --name "${HOSTNAME}" localhost
