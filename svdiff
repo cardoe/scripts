@@ -1,0 +1,73 @@
+#!/bin/bash
+# Copyright (c) 2011, Terry Meacham <terry.t.meacham@gmail.com>
+# Released under the BSD 2-clause license
+
+function vdiff() 
+{
+	file=.diff_.%%.$(basename $2)
+	svn cat $1/$2 > $file
+	vimdiff $file $2 
+	rm -f $file
+}
+
+if [[ $# -lt 2 ]]; then
+	echo "usage: $0 [svnpath to trunk] [svnpath to branch] <1|2>"
+	echo "1: use previous checkout/reintegrate to view from the beginning"
+	echo "2: use previous to view from last viewed diff"
+	exit 1;
+fi
+
+root=/var/tmp/review_$(basename $2)
+
+if [[ $# -ne 3 ]] || [[ $3 -lt 1 ]]; then
+	rm -rf $root
+
+	svn co $1 $root
+	cd $root
+
+	svn merge --reintegrate $2
+	
+else
+	cd $root
+	mv _svn .svn
+fi
+
+difflist=$(svn st | grep '^[MACD]' | sed -e 's|^[MACD][\t +-]*\(.*\)|\1|')
+
+mv .svn _svn
+
+if [[ -f .previous ]] && [[ $3 -gt 1 ]]; then
+	prev=$(cat .previous)
+fi
+
+for line in $difflist; do 
+	if [[ $prev != "" ]]; then
+		if [[ $prev != $line ]]; then
+			echo "Skipping: $line"
+			continue
+		fi
+		prev=""
+	fi
+
+	echo "Next: $line"
+	echo -n "Continue? [Y|n|s] "
+	read response
+	
+	if [[ ${response:0:1} == "n" ]]; then
+		echo "exiting..."
+		exit 0
+	fi
+
+	#store current file for restore fucntion
+	echo "$line" > .previous
+
+	if [[ ${response:0:1} == "s" ]]; then
+		continue
+	fi
+
+	echo "Viewing diff: $line"
+
+	vdiff $1 $line
+done
+
+echo "Done!"
