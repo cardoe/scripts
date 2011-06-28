@@ -22,7 +22,7 @@ root=/var/tmp/review_$(basename $2)
 if [[ $# -ne 3 ]] || [[ $3 -lt 1 ]]; then
 	rm -rf $root
 
-	svn co $1 $root
+	svn co --ignore-externals $1 $root
 	cd $root
 
 	svn merge --reintegrate $2
