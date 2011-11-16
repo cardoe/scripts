@@ -1,0 +1,43 @@
+#!/bin/bash
+# Copyright (c) 2011, Terry Meacham <terry.t.meacham@gmail.com>
+# Copyright (c) 2011, Doug Goldstein <cardoe@cardoe.com>
+#
+# Based on svdiff script by Terry Meacham
+#
+# Released under the BSD 2-clause license
+
+if [[ $# -ne 2 ]]; then
+	echo "usage: $0 [svnpath to trunk] [svnpath to branch]"
+	exit 1;
+fi
+
+root=/var/tmp/review_$(basename $2)
+trunk=/var/tmp/review_trunk
+trunk_used=no
+
+# Removes what was previously in the review directory
+rm -rf $root
+
+# Checks out the branch to review
+echo "Checking out the review branch..."
+svn export --ignore-externals $2 $root > /dev/null
+echo "Done!"
+
+# See if the path to trunk is a URL
+echo $1 | grep -c '://' > /dev/null
+if [[ $? -eq 0 ]]; then
+	echo "Checking out trunk..."
+	svn export --ignore-externals $1 $trunk > /dev/null
+	trunk_used=yes
+	echo "Done!"
+fi
+
+if [[ ${trunk_used} = "yes" ]]; then
+	meld "${trunk}" "${root}"
+	rm -rf "${trunk}"
+else
+	meld "$1" "${root}"
+fi
+
+rm -rf "${root}"
+echo "Cleaned up"
