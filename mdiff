@@ -11,8 +11,8 @@ if [[ $# -ne 2 ]]; then
 	exit 1;
 fi
 
-root=/var/tmp/review_$(basename $2)
-trunk=/var/tmp/review_original
+root=$(mktemp --directory --tmpdir=/var/tmp)
+trunk=$(mktemp --directory --tmpdir=/var/tmp)
 trunk_used=no
 
 # Removes what was previously in the review directory
@@ -20,14 +20,14 @@ rm -rf $root
 
 # Checks out the branch to review
 echo "Checking out the review branch..."
-svn export --ignore-externals $2 $root > /dev/null
+svn export --force --ignore-externals $2 $root > /dev/null
 echo "Done!"
 
 # See if the path to trunk is a URL
 echo $1 | grep -c '://' > /dev/null
 if [[ $? -eq 0 ]]; then
 	echo "Checking out trunk..."
-	svn export --ignore-externals $1 $trunk > /dev/null
+	svn export --force --ignore-externals $1 $trunk > /dev/null
 	trunk_used=yes
 	echo "Done!"
 fi
