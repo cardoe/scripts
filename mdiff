@@ -34,7 +34,7 @@ echo "Done!"
 echo "Checking out $(basename $1)..."
 svn export --force --ignore-externals $1 ${trunk} > /dev/null
 if [ $? -ne 0 ]; then
-    echo "Failed to checkout $2 to ${trunk}"
+    echo "Failed to checkout $1 to ${trunk}"
     exit 1
 fi
 echo "Done!"
